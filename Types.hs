@@ -1,11 +1,16 @@
 {-# OPTIONS_GHC -Wall #-}
+{-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE FlexibleInstances #-}
 
 module Types where
 
-import Exp
+import qualified Exp
 
+import Data.Functor
 import Data.Set (Set)
 import qualified Data.Set as Set
+import Data.Map (Map)
+import qualified Data.Map as Map
 
 type Name = String    -- name of a type variable
 
@@ -25,7 +30,7 @@ instance Show Type where
 
 -- | Construct an arrow type from two others
 arrow :: Type -> Type -> Type
-s `arrow` t = TArrow s t
+t `arrow` t' = TArrow t t'
 
 
 -- | Type schemes (Polytypes)
@@ -36,25 +41,61 @@ data Scheme =
 
 instance Show Scheme where
   show (Mono t)     = show t
-  show (Forall a s) = "∀" ++ a ++ ". " ++ show s
+  show (Forall a t) = "∀" ++ a ++ ". " ++ show t
 
 
--- | Given a type, find all free type variables
-freeType :: Type -> Set Type
-freeType (TVar a)     = Set.singleton $ TVar a
-freeType (TArrow s t) = Set.union (freeType s) (freeType t)
-freeType _            = Set.empty
+type Subst = Maybe (Map Name Type)
 
--- | Given a type scheme, find all free type varibles
-freeScheme :: Scheme -> Set Type
-freeScheme (Mono t)     = freeType t
-freeScheme (Forall a s) = Set.delete (TVar a) $ freeScheme s
+empty :: Subst
+empty = Just Map.empty
+
+errorSubst :: Subst
+errorSubst = Nothing
+
+class TypeVariables a where
+  free  :: TypeVariables a => a -> Set Name
+  subst :: TypeVariables a => Subst -> a -> Maybe a
+
+instance TypeVariables Type where
+  free (TVar a)     = Set.singleton a
+  free (TArrow s t) = Set.union (free s) (free t)
+  free _            = Set.empty
+
+  subst ms v@(TVar a) =
+    do s <- ms
+       return $ case Map.lookup a s of
+         Just a  -> a
+         Nothing -> v
+
+  subst ms (TArrow t t') =
+    do subT  <- subst ms t
+       subT' <- subst ms t'
+       return $ TArrow subT subT'
+
+  subst ms t = ms >>= (\_ -> return t)
+
+instance TypeVariables Scheme where
+  free (Mono t)     = free t
+  free (Forall a t) = Set.delete a $ free t
+
+  subst ms (Mono t) =
+    do subT <- subst ms t
+       return $ Mono subT
+
+  subst ms (Forall a t) =
+    do let ms' = Map.delete a <$> ms
+       subT <- subst ms' t
+       return $ Forall a subT
 
 
 -- | Typing context: associates an identifier with a type scheme
-type Context = [(Exp.Id, Scheme)]
+type Context = Map Exp.Id Scheme
 
--- | Given a typing context, find all free type variables
-free :: Context -> Set Type
-free c = Set.unions $ map (\(_, s) -> freeScheme s) c
+instance TypeVariables Context where
+  free = Map.foldl (\fv t -> Set.union fv $ free t) Set.empty
+  subst ms c = undefined -- Map.map (subst ms) c
 
+    -- need to substitute all the values in this context (map) with
+    -- all the values in the other context map.
+       -- other context map is a Maybe
+    -- TODO: investigate occur check? [BN98]
