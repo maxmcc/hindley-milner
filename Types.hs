@@ -24,10 +24,10 @@ data Type =
     deriving (Eq, Ord)
 
 instance Show Type where
-  show TInt         = "Int"
-  show TBool        = "Bool"
-  show (TVar a)     = a
-  show (TArrow s t) = show s ++ " -> " ++ show t
+  show TInt          = "Int"
+  show TBool         = "Bool"
+  show (TVar a)      = a
+  show (TArrow t t') = show t ++ " -> " ++ show t'
 
 -- | Construct an arrow type from two others
 arrow :: Type -> Type -> Type
@@ -52,22 +52,26 @@ type Subst = Map Name Type
 empty :: Subst
 empty = Map.empty
 
+-- | Compose two substitutions
+compose :: Subst -> Subst -> Subst
+compose s s' = Map.map (subst s) s' `Map.union` s
+
 
 -- | Typeclass for structures containing polymorphic types
 class TypeVars a where
   -- | Return a set of all free variables in a type structure
-  free  :: a -> Set Name
+  free :: a -> Set Name
   -- | Apply a substitution to a type structure
   subst :: Subst -> a -> a
 
 
 instance TypeVars Type where
   free (TVar a)     = Set.singleton a
-  free (TArrow s t) = Set.union (free s) (free t)
+  free (TArrow s t) = free s `Set.union` free t
   free _            = Set.empty
 
   subst s v@(TVar a)    = fromMaybe v $ Map.lookup a s
-  subst s (TArrow t t') = TArrow (subst s t) (subst s t')
+  subst s (TArrow t t') = subst s t `arrow` subst s t'
   subst _ t             = t
 
 
@@ -86,3 +90,7 @@ instance TypeVars Context where
   free = Map.foldl (\fv t -> Set.union fv $ free t) Set.empty
   subst s = Map.map (subst s)
     -- TODO: investigate occur check? [BN98]
+
+-- | Remove a variable from the context
+remove :: Context -> Name -> Context
+remove = flip Map.delete
