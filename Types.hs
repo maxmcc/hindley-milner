@@ -6,11 +6,12 @@ module Types where
 
 import qualified Exp
 
-import Data.Functor
+import Data.Maybe
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Map (Map)
 import qualified Data.Map as Map
+
 
 type Name = String    -- name of a type variable
 
@@ -44,58 +45,44 @@ instance Show Scheme where
   show (Forall a t) = "∀" ++ a ++ ". " ++ show t
 
 
-type Subst = Maybe (Map Name Type)
+-- | A substitution of types for type variables
+type Subst = Map Name Type
 
+-- | The empty (Id) substitution
 empty :: Subst
-empty = Just Map.empty
+empty = Map.empty
 
-errorSubst :: Subst
-errorSubst = Nothing
 
-class TypeVariables a where
-  free  :: TypeVariables a => a -> Set Name
-  subst :: TypeVariables a => Subst -> a -> Maybe a
+-- | Typeclass for structures containing polymorphic types
+class TypeVars a where
+  -- | Return a set of all free variables in a type structure
+  free  :: a -> Set Name
+  -- | Apply a substitution to a type structure
+  subst :: Subst -> a -> a
 
-instance TypeVariables Type where
+
+instance TypeVars Type where
   free (TVar a)     = Set.singleton a
   free (TArrow s t) = Set.union (free s) (free t)
   free _            = Set.empty
 
-  subst ms v@(TVar a) =
-    do s <- ms
-       return $ case Map.lookup a s of
-         Just a  -> a
-         Nothing -> v
+  subst s v@(TVar a)    = fromMaybe v $ Map.lookup a s
+  subst s (TArrow t t') = TArrow (subst s t) (subst s t')
+  subst _ t             = t
 
-  subst ms (TArrow t t') =
-    do subT  <- subst ms t
-       subT' <- subst ms t'
-       return $ TArrow subT subT'
 
-  subst ms t = ms >>= (\_ -> return t)
-
-instance TypeVariables Scheme where
+instance TypeVars Scheme where
   free (Mono t)     = free t
   free (Forall a t) = Set.delete a $ free t
 
-  subst ms (Mono t) =
-    do subT <- subst ms t
-       return $ Mono subT
-
-  subst ms (Forall a t) =
-    do let ms' = Map.delete a <$> ms
-       subT <- subst ms' t
-       return $ Forall a subT
+  subst s (Mono t)     = Mono $ subst s t
+  subst s (Forall a t) = Forall a $ subst (Map.delete a s) t
 
 
--- | Typing context: associates an identifier with a type scheme
+-- | Typing context associating an identifier with a type scheme
 type Context = Map Exp.Id Scheme
 
-instance TypeVariables Context where
+instance TypeVars Context where
   free = Map.foldl (\fv t -> Set.union fv $ free t) Set.empty
-  subst ms c = undefined -- Map.map (subst ms) c
-
-    -- need to substitute all the values in this context (map) with
-    -- all the values in the other context map.
-       -- other context map is a Maybe
+  subst s = Map.map (subst s)
     -- TODO: investigate occur check? [BN98]
