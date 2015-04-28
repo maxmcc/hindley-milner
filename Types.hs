@@ -59,16 +59,20 @@ compose s s' = Map.map (subst s) s' `Map.union` s
 
 -- | Typeclass for structures containing polymorphic types
 class TypeVars a where
-  -- | Return a set of all free variables in a type structure
-  free :: a -> Set Name
+  -- | Return a set of all type variables in a type structure (free and bound)
+  allVars :: a -> Set Name
+  -- | Return a set of all free type variables in a type structure
+  freeVars :: a -> Set Name
   -- | Apply a substitution to a type structure
   subst :: Subst -> a -> a
 
 
 instance TypeVars Type where
-  free (TVar a)     = Set.singleton a
-  free (TArrow s t) = free s `Set.union` free t
-  free _            = Set.empty
+  allVars (TVar a)      = Set.singleton a
+  allVars (TArrow t t') = allVars t `Set.union` allVars t'
+  allVars _             = Set.empty
+
+  freeVars = allVars
 
   subst s v@(TVar a)    = fromMaybe v $ Map.lookup a s
   subst s (TArrow t t') = subst s t `arrow` subst s t'
@@ -76,8 +80,11 @@ instance TypeVars Type where
 
 
 instance TypeVars Scheme where
-  free (Mono t)     = free t
-  free (Forall a t) = Set.delete a $ free t
+  allVars (Mono t)      = allVars t
+  allVars (Forall a t)  = Set.insert a $ allVars t
+
+  freeVars (Mono t)     = freeVars t
+  freeVars (Forall a t) = Set.delete a $ freeVars t
 
   subst s (Mono t)     = Mono $ subst s t
   subst s (Forall a t) = Forall a $ subst (Map.delete a s) t
@@ -87,8 +94,9 @@ instance TypeVars Scheme where
 type Context = Map Exp.Id Scheme
 
 instance TypeVars Context where
-  free = Map.foldl (\fv t -> Set.union fv $ free t) Set.empty
-  subst s = Map.map (subst s)
+  allVars  = Map.foldl (\av t -> Set.union av $ allVars t) Set.empty
+  freeVars = Map.foldl (\fv t -> Set.union fv $ freeVars t) Set.empty
+  subst s  = Map.map (subst s)
     -- TODO: investigate occur check? [BN98]
 
 -- | Remove a variable from the context
