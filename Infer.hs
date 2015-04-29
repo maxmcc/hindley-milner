@@ -45,9 +45,9 @@ unify TInt TInt                   = empty
 unify TBool TBool                 = empty
 unify (TVar a) t                  = bindVar a t
 unify t (TVar a)                  = bindVar a t
-unify (TArrow s s') (TArrow t t') = compose lhs rhs
-  where lhs = unify s t
-        rhs = subst lhs s' `unify` subst lhs t'
+unify (TArrow s s') (TArrow t t') = compose s1 s2
+  where s1 = unify s t
+        s2 = subst s1 s' `unify` subst s1 t'
 unify _ _                         = error "structural mismatch: can't unify"
 
 -- | Bind a type variable to a type
