@@ -1,4 +1,5 @@
 {-# OPTIONS_GHC -Wall #-}
+{-# LANGUAGE TupleSections #-}
 
 module Infer where
 
@@ -7,6 +8,7 @@ import Types
 
 import Data.Maybe
 import Data.IORef
+import Control.Applicative hiding (empty)
 import Control.Monad
 import qualified Data.Set as Set
 import qualified Data.Map as Map
@@ -23,20 +25,20 @@ makeNewVar =
   do r <- newIORef 'a'
      return $ do
        v <- readIORef r
-       writeIORef r $ succ v
+       modifyIORef r succ
        return [v]
 
 
 -- | Replace quantified type variables by fresh ones
 inst :: IO String -> Scheme -> IO Type
-inst newVar t = ms >>= \s -> return $ replaceFree s t
+inst newVar t = pure (replaceFree t) <*> ms
   where ms = foldM update Map.empty $ Set.toList boundVars
         boundVars = allVars t `Set.difference` freeVars t
-        replaceFree s (Mono t')     = subst s t'
-        replaceFree s (Forall _ t') = replaceFree s t'
+        replaceFree (Mono t')     s = subst s t'
+        replaceFree (Forall _ t') s = replaceFree t' s
         update acc a =
-          do n <- newVar
-             return $ Map.insert a (TVar n) acc
+          do n <- fmap TVar newVar
+             return $ Map.insert a n acc
 
 
 -- | Find most general unifier of two types
@@ -60,21 +62,19 @@ bindVar a t | t == TVar a               = empty
 -- | Implementation of Algorithm W for finding principal type
 inferTypes :: IO String -> Context -> Exp -> IO (Subst, Type)
 
-inferTypes newVar c (Ident i) = inst newVar t >>= \t' -> return (empty, t')
-  where t = fromMaybe (error "unknown identifier") $ Map.lookup i c
+inferTypes newVar c (Ident i) = pure (empty,) <*> inst newVar t'
+  where t' = fromMaybe (error "unknown identifier") $ Map.lookup i c
 
 inferTypes newVar c (Lambda v e) =
-  do n <- newVar
-     let t' = TVar n
-         c' = Map.insert v (Mono t') $ remove c v
+  do t' <- fmap TVar newVar
+     let c' = Map.insert v (Mono t') $ remove c v
      (s1, t1) <- inferTypes newVar c' e
      return (s1, subst s1 t' `TArrow` t1)
 
 inferTypes newVar c (Apply e e') =
   do (s1, t1) <- inferTypes newVar c e
      (s2, t2) <- inferTypes newVar (subst s1 c) e'
-     n <- newVar
-     let t' = TVar n
+     t' <- fmap TVar newVar
      let s3 = unify (subst s2 t1) (TArrow t2 t')
      return (compose s3 $ compose s2 s1, subst s3 t')
 

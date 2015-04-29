@@ -4,7 +4,7 @@
 
 module Types where
 
-import qualified Exp
+import Exp
 
 import Data.Maybe
 import Data.Set (Set)
@@ -87,7 +87,7 @@ instance TypeVars Scheme where
 
 
 -- | Typing context associating an identifier with a type scheme
-type Context = Map Exp.Id Scheme
+type Context = Map Id Scheme
 
 instance TypeVars Context where
   allVars  = Map.foldl (\av t -> Set.union av $ allVars t) Set.empty
