@@ -24,7 +24,7 @@ makeNewVar =
      return $ do
        v <- readIORef r
        writeIORef r $ succ v
-       return ['\'', v]
+       return [v]
 
 
 -- | Replace quantified type variables by fresh ones
@@ -53,7 +53,7 @@ unify _ _                         = error "structural mismatch: can't unify"
 -- | Bind a type variable to a type
 bindVar :: String -> Type -> Subst
 bindVar a t | t == TVar a               = empty
-            | a `Set.member` freeVars t = error "fails occur check: can't unify"
+            | a `Set.member` freeVars t = error "occurs check: can't unify"
             | otherwise                 = Map.singleton a t
 
 
@@ -85,52 +85,3 @@ inferTypes newVar c (Let v e e') =
      (s2, t2) <- inferTypes newVar c' e'
      return (compose s2 s1, t2)
 
-
--- | A default context
-stdLib :: Context
-stdLib = Map.fromList [
-      ("zero", Mono TInt)
-    , ("one", Mono TInt)
-    , ("x", Mono TInt)
-    , ("true", Mono TBool)
-    , ("false", Mono TBool)
-    , ("not", Mono $ TBool `TArrow` TBool)
-    , ("add", Mono $ TArrow TInt $ TArrow TInt TInt)
-    , ("and", Mono $ TArrow TBool $ TArrow TBool TBool)
-    , ("id", Forall "a" $ Mono $ TVar "a" `TArrow` TVar "a")
-    , ("eq", Forall "a" $ Mono $ TArrow (TVar "a") $ TArrow (TVar "a") TBool)
-    , ("compose", Forall "a" $ Forall "b" $ Forall "c" $ Mono $
-        (TVar "b" `TArrow` TVar "c") `TArrow`
-        ((TVar "a" `TArrow` TVar "b") `TArrow` (TVar "a" `TArrow` TVar "c")))
-
-  ]
-
--- | Expose a nice type inference interface
-typeOf :: Exp -> IO Type
-typeOf e =
-  do newVar <- makeNewVar
-     t <- inferTypes newVar stdLib e
-     return $ snd t
-
-demo :: Exp -> IO ()
-demo e = typeOf e >>= \t -> putStrLn $ show e ++ " : " ++ show t
-
--- Some example expressions
-
-x :: Exp
-x = Ident "x"
-
-ex1 :: Exp
-ex1 = Apply (Ident "id") $ Apply (Ident "id") x
-
-ex2 :: Exp
-ex2 = Apply (Apply (Ident "eq") (Ident "false")) (Ident "true")
-
-ex3 :: Exp
-ex3 = Ident "compose"
-
-ex4 :: Exp
-ex4 = Apply (Apply (Ident "compose") (Ident "not")) (Apply (Ident "eq") (Ident "x"))
-
-ex5 :: Exp
-ex5 = Apply (Ident "compose") (Ident "not")
