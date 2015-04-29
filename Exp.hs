@@ -13,7 +13,6 @@ data Exp =
 
 instance Show Exp where
   show (Ident v)    = v
-  show (Apply e e') = show e ++ " " ++ show e'
+  show (Apply e e') = show e ++ "(" ++ show e' ++ ")"
   show (Lambda v e) = "λ" ++ v ++ " -> " ++ show e
   show (Let v e e') = "let " ++ v ++ " = " ++ show e ++ " in " ++ show e'
-

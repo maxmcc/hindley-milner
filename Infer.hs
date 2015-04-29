@@ -68,7 +68,7 @@ inferTypes newVar c (Lambda v e) =
      let t' = TVar n
          c' = Map.insert v (Mono t') $ remove c v
      (s1, t1) <- inferTypes newVar c' e
-     return (s1, subst s1 t' `arrow` t1)
+     return (s1, subst s1 t' `TArrow` t1)
 
 inferTypes newVar c (Apply e e') =
   do (s1, t1) <- inferTypes newVar c e
@@ -85,15 +85,24 @@ inferTypes newVar c (Let v e e') =
      (s2, t2) <- inferTypes newVar c' e'
      return (compose s2 s1, t2)
 
+
 -- | A default context
 stdLib :: Context
 stdLib = Map.fromList [
-      ("i", Mono TInt)
-    , ("b", Mono TBool)
-    , ("add", Mono $ arrow TInt $ arrow TInt TInt)
-    , ("and", Mono $ arrow TBool $ arrow TBool TBool)
-    , ("id", Forall "a" $ Mono $ TVar "a" `arrow` TVar "a")
-    , ("eq", Forall "a" $ Mono $ arrow (TVar "a") $ arrow (TVar "a") TBool)
+      ("zero", Mono TInt)
+    , ("one", Mono TInt)
+    , ("x", Mono TInt)
+    , ("true", Mono TBool)
+    , ("false", Mono TBool)
+    , ("not", Mono $ TBool `TArrow` TBool)
+    , ("add", Mono $ TArrow TInt $ TArrow TInt TInt)
+    , ("and", Mono $ TArrow TBool $ TArrow TBool TBool)
+    , ("id", Forall "a" $ Mono $ TVar "a" `TArrow` TVar "a")
+    , ("eq", Forall "a" $ Mono $ TArrow (TVar "a") $ TArrow (TVar "a") TBool)
+    , ("compose", Forall "a" $ Forall "b" $ Forall "c" $ Mono $
+        (TVar "b" `TArrow` TVar "c") `TArrow`
+        ((TVar "a" `TArrow` TVar "b") `TArrow` (TVar "a" `TArrow` TVar "c")))
+
   ]
 
 -- | Expose a nice type inference interface
@@ -102,3 +111,26 @@ typeOf e =
   do newVar <- makeNewVar
      t <- inferTypes newVar stdLib e
      return $ snd t
+
+demo :: Exp -> IO ()
+demo e = typeOf e >>= \t -> putStrLn $ show e ++ " : " ++ show t
+
+-- Some example expressions
+
+x :: Exp
+x = Ident "x"
+
+ex1 :: Exp
+ex1 = Apply (Ident "id") $ Apply (Ident "id") x
+
+ex2 :: Exp
+ex2 = Apply (Apply (Ident "eq") (Ident "false")) (Ident "true")
+
+ex3 :: Exp
+ex3 = Ident "compose"
+
+ex4 :: Exp
+ex4 = Apply (Apply (Ident "compose") (Ident "not")) (Apply (Ident "eq") (Ident "x"))
+
+ex5 :: Exp
+ex5 = Apply (Ident "compose") (Ident "not")

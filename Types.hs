@@ -27,11 +27,7 @@ instance Show Type where
   show TInt          = "Int"
   show TBool         = "Bool"
   show (TVar a)      = a
-  show (TArrow t t') = show t ++ " -> " ++ show t'
-
--- | Construct an arrow type from two others
-arrow :: Type -> Type -> Type
-t `arrow` t' = TArrow t t'
+  show (TArrow t t') = "(" ++ show t ++ " -> " ++ show t' ++ ")"
 
 
 -- | Type schemes (Polytypes)
@@ -75,7 +71,7 @@ instance TypeVars Type where
   freeVars = allVars
 
   subst s v@(TVar a)    = fromMaybe v $ Map.lookup a s
-  subst s (TArrow t t') = subst s t `arrow` subst s t'
+  subst s (TArrow t t') = subst s t `TArrow` subst s t'
   subst _ t             = t
 
 
@@ -97,7 +93,6 @@ instance TypeVars Context where
   allVars  = Map.foldl (\av t -> Set.union av $ allVars t) Set.empty
   freeVars = Map.foldl (\fv t -> Set.union fv $ freeVars t) Set.empty
   subst s  = Map.map (subst s)
-    -- TODO: investigate occur check? [BN98]
 
 -- | Remove a variable from the context
 remove :: Context -> Name -> Context
