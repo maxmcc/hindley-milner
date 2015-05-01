@@ -24,6 +24,7 @@ stdLib = Map.fromList [
     , ("compose", Forall "a" $ Forall "b" $ Forall "c" $ Mono $
         (TVar "b" `TArrow` TVar "c") `TArrow`
         ((TVar "a" `TArrow` TVar "b") `TArrow` (TVar "a" `TArrow` TVar "c")))
+    , ("wrong", Forall "a" $ Mono $ TVar "a")
   ]
 
 
